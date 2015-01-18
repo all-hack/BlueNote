@@ -62,7 +62,7 @@
 (defn- getBeaconID
   [uuid major minor]
   (let [query "SELECT id FROM beacons WHERE uuid = ? AND major = ? AND minor = ?;"]
-    (-> (sql/query messages/spec [query uuid major minor])
+    (-> (sql/query messages/spec [query (str uuid) (read-string major) (read-string minor)])
         first
         :id)))
 
@@ -70,20 +70,20 @@
   "checks to see if beacon is known, if it is, it looks for messages that have user id and the beacon
   id returned that were posted after last updated"
   [beacons user_id]
-  (let [beacon_ids (map #(getBeaconID (:uuid %) (:major %) (:minor %)) beacons)]
+  (let [beacon_ids (map #(getBeaconID (str (:uuid %)) (read-string (:major %)) (read-string (:minor %))) beacons)]
     ;; beacon is registered
     (when-not (empty? beacon_ids)
       ;; update last time read
       (map #(getMessageHelper % user_id) beacon_ids))))
 
-(defroutes app-routes
+(defroutes app
   ;; check to see if user has beacons/is willing to accept anything
   ;; if has beacons, checks to see if beacon is the one currently being talked to
   ;; if public, grabs any outstanding messages for that users.
   (GET "/getMessages" [:as request]
-       (let [req (get-in request [:params])]
-         (println req)
-         (ring/response {:response (getMessages (:beacons req) (:user_id req))})))
+       (let [req (get-in request [:params])
+             beacons (reduce merge (:beacons req))]
+         (ring/response (getMessages [beacons] (read-string (:user_id req))))))
   (GET "/getPublic" [:as request]
        (let [beacons (get-in request [:params :beacons])
              beacon_ids (map #(getBeaconID %) beacons)]
@@ -92,12 +92,12 @@
   ; if not found
   (route/not-found "Page not found"))
 
-(def app
-  "middlewear for HTTP
-  from http://zaiste.net/2014/02/web_applications_in_clojure_all_the_way_with_compojure_and_om/"
-  (-> (handler/api app-routes)
-      (middleware/wrap-json-body)
-      (middleware/wrap-json-response)))
+;(def app
+ ; "middlewear for HTTP
+  ;from http://zaiste.net/2014/02/web_applications_in_clojure_all_the_way_with_compojure_and_om/"
+  ;(-> (handler/api app-routes)
+   ;   (middleware/wrap-json-body)
+    ;  (middleware/wrap-json-response)))
 
 (defn -main [& [port]]
   (users/migrate)
