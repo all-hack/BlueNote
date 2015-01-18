@@ -81,7 +81,7 @@
 
 (defn- postMessage
   [toPost]
-  (let [beacon (read-string (:beacon_id toPost))
+  (let [beacon (getBeaconID (:uuid toPost) (:major toPost) (:minor toPost))
         from_user_id (read-string (:from_user_id toPost))
         anon false ;(:anon toPost)
         message (:message toPost)
@@ -116,6 +116,7 @@
          (ring/response (map #(getPublicMessages %) beacon_ids))))
   (GET "/getBeaconID" [:as request]
        (let [beacon (get-in request [:params])]
+         (println beacon)
          (ring/response (getBeaconID (:uuid beacon) (:major beacon) (:minor beacon)))))
   (POST "/postMessage" [:as request]
         (let [message (get-in request [:params])]
