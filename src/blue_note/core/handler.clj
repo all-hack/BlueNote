@@ -91,6 +91,14 @@
 
 ;;;;;
 
+(defn- addNewBeacon
+  [beacon]
+  (let [major (read-string (:major beacon))
+        minor (read-string (:minor beacon))
+        owner (read-string (:owner beacon))
+        query "INSERT INTO beacons (uuid, major, minor, name, owner) VALUES (?, ?, ?, ?, ?);"]
+    (sql/execute! messages/spec [query (:uuid beacon) major minor (:name beacon) owner])))
+
 (defroutes app-routes
   ;; check to see if user has beacons/is willing to accept anything
   ;; if has beacons, checks to see if beacon is the one currently being talked to
@@ -112,6 +120,10 @@
   (POST "/postMessage" [:as request]
         (let [message (get-in request [:params])]
           (postMessage message)
+          (ring/response {:status "success"})))
+  (POST "/newBeacon" [:as request]
+        (let [beacon (get-in request [:params])]
+          (addNewBeacon beacon)
           (ring/response {:status "success"})))
   (route/resources "/")
   ; if not found
