@@ -96,8 +96,8 @@
   (let [major (read-string (:major beacon))
         minor (read-string (:minor beacon))
         owner (read-string (:owner beacon))
-        query "INSERT INTO beacons (uuid, major, minor, name, owner) VALUES (?, ?, ?, ?, ?);"]
-    (sql/execute! messages/spec [query (:uuid beacon) major minor (:name beacon) owner])))
+        query "INSERT INTO beacons (uuid, major, minor, name, owner) VALUES (?, ?, ?, ?, ?) RETURNING id;"]
+    (first (sql/query messages/spec [query (:uuid beacon) major minor (:name beacon) owner]))))
 
 (defroutes app-routes
   ;; check to see if user has beacons/is willing to accept anything
@@ -123,8 +123,7 @@
           (ring/response {:status "success"})))
   (POST "/newBeacon" [:as request]
         (let [beacon (get-in request [:params])]
-          (addNewBeacon beacon)
-          (ring/response {:status "success"})))
+          (ring/response (addNewBeacon beacon))))
   (route/resources "/")
   ; if not found
   (route/not-found "Page not found"))
