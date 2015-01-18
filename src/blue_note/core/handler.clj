@@ -83,6 +83,7 @@
   (GET "/getMessages" [:as request]
        (let [req (get-in request [:params])
              beacons (reduce merge (:beacons req))]
+         (println req)
          (ring/response (getMessages [beacons] (read-string (:user_id req))))))
   (GET "/getPublic" [:as request]
        (let [beacons (get-in request [:params :beacons])
