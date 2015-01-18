@@ -83,10 +83,10 @@
   [toPost]
   (let [beacon (read-string (:beacon_id toPost))
         from_user_id (read-string (:from_user_id toPost))
-        anon (:anon toPost)
+        anon false ;(:anon toPost)
         message (:message toPost)
         public true
-        query "INSERT INTO message (beacon, from_user_id, anon, message, public) VALUES (?, ?, ?, ?, ?)"]
+        query "INSERT INTO messages (beacon, from_user_id, anon, message, public) VALUES (?, ?, ?, ?, ?)"]
     (sql/execute! messages/spec [query beacon from_user_id anon message public])))
 
 ;;;;;
