@@ -111,7 +111,7 @@
          (ring/response (getMessages [beacons] (read-string (:user_id req))))))
   (GET "/getPublic" [:as request]
        (let [beacons (get-in request [:params :beacons])
-             beacon_ids (map #(getBeaconID (str (:uuid %)) (:major %) (:minor %)) beacons)]
+             beacon_ids (map #(getBeaconID (str (:uuid %)) (:major %) (:minor %)) [beacons])]
          (println beacons)
          (ring/response (map #(getPublicMessages %) beacon_ids))))
   (GET "/getBeaconID" [:as request]
