@@ -52,7 +52,7 @@
                        :count
                        pos?)
         withNames
-        (if hasChecked
+        (if false ;hasChecked
           (getMostRecent beacon_id user_id)
           (getAll beacon_id user_id))
         directMessages (map #(anon %) withNames)]
