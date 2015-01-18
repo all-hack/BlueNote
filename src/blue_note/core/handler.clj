@@ -76,6 +76,21 @@
       ;; update last time read
       (map #(getMessageHelper % user_id) beacon_ids))))
 
+
+;;;;;;
+
+(defn- postMessage
+  [toPost]
+  (let [beacon (read-string (:beacon_id toPost))
+        from_user_id (read-string (:from_user_id toPost))
+        anon (:anon toPost)
+        message (:message toPost)
+        public true
+        query "INSERT INTO message (beacon, from_user_id, anon, message, public) VALUES (?, ?, ?, ?, ?)"]
+    (sql/execute! messages/spec [query beacon from_user_id anon message public])))
+
+;;;;;
+
 (defroutes app-routes
   ;; check to see if user has beacons/is willing to accept anything
   ;; if has beacons, checks to see if beacon is the one currently being talked to
@@ -88,8 +103,16 @@
          (ring/response (getMessages [beacons] (read-string (:user_id req))))))
   (GET "/getPublic" [:as request]
        (let [beacons (get-in request [:params :beacons])
-             beacon_ids (map #(getBeaconID %) beacons)]
+             beacon_ids (map #(getBeaconID (str (:uuid %)) (:major %) (:minor %)) beacons)]
+         (println beacons)
          (ring/response (map #(getPublicMessages %) beacon_ids))))
+  (GET "/getBeaconID" [:as request]
+       (let [beacon (get-in request [:params])]
+         (ring/response (getBeaconID (:uuid beacon) (:major beacon) (:minor beacon)))))
+  (POST "/postMessage" [:as request]
+        (let [message (get-in request [:params])]
+          (postMessage message)
+          (ring/response {:status "success"})))
   (route/resources "/")
   ; if not found
   (route/not-found "Page not found"))
