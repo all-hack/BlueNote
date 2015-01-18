@@ -1,11 +1,12 @@
 (ns blue-note.core.handler
   (:require [compojure.core :refer [defroutes GET PUT POST DELETE ANY]]
-            [compojure.handler :refer [site]]
+            [compojure.handler :as handler]
             [compojure.route :as route]
             [clojure.java.io :as io]
             [environ.core :refer [env]]
             [ring.adapter.jetty :as jetty]
             [ring.util.response :as ring]
+            [ring.middleware.json :as middleware]
             [clojure.java.jdbc :as sql]
             [blue-note.model.messages :as messages]
             [blue-note.model.beacons :as beacons]
@@ -75,19 +76,28 @@
       ;; update last time read
       (map #(getMessageHelper % user_id) beacon_ids))))
 
-(defroutes app
+(defroutes app-routes
   ;; check to see if user has beacons/is willing to accept anything
   ;; if has beacons, checks to see if beacon is the one currently being talked to
   ;; if public, grabs any outstanding messages for that users.
   (GET "/getMessages" [:as request]
        (let [req (get-in request [:params])]
-         (ring/response (getMessages (:beacons req) (:user_id req)))))
+         (println req)
+         (ring/response {:response (getMessages (:beacons req) (:user_id req))})))
   (GET "/getPublic" [:as request]
        (let [beacons (get-in request [:params :beacons])
              beacon_ids (map #(getBeaconID %) beacons)]
          (ring/response (map #(getPublicMessages %) beacon_ids))))
-  (ANY "*" []
-       (route/not-found (slurp (io/resource "404.html")))))
+  (route/resources "/")
+  ; if not found
+  (route/not-found "Page not found"))
+
+(def app
+  "middlewear for HTTP
+  from http://zaiste.net/2014/02/web_applications_in_clojure_all_the_way_with_compojure_and_om/"
+  (-> (handler/api app-routes)
+      (middleware/wrap-json-body)
+      (middleware/wrap-json-response)))
 
 (defn -main [& [port]]
   (users/migrate)
@@ -95,4 +105,4 @@
   (receive-update/migrate)
   (messages/migrate)
   (let [port (Integer. (or port (env :port) 5000))]
-    (jetty/run-jetty (site #'app) {:port port :join? false})))
+    (jetty/run-jetty (handler/site #'app) {:port port :join? false})))
