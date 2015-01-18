@@ -3,20 +3,96 @@
             [compojure.handler :refer [site]]
             [compojure.route :as route]
             [clojure.java.io :as io]
+            [environ.core :refer [env]]
             [ring.adapter.jetty :as jetty]
-            [environ.core :refer [env]]))
+            [ring.util.response :as ring]
+            [clojure.java.jdbc :as sql]
+            [blue-note.model.messages :as messages]
+            [blue-note.model.beacons :as beacons]
+            [blue-note.model.users :as users]
+            [blue-note.model.receive-update :as receive-update]))
 
-(defn splash []
-  {:status 200
-   :headers {"Content-Type" "text/plain"}
-   :body (pr-str ["Hello" :from 'Heroku])})
+(defn- anon
+  [message]
+  (if (:anon message)
+    (dissoc :from_user_id message)
+    message))
+
+(defn- getPublicMessages
+  [beacon_id]
+  (let [query "SELECT * FROM messages WHERE beacon = ? AND public = TRUE;"
+        messages (sql/query messages/spec [query beacon_id])]
+    (map #(anon %) messages)))
+
+(defn- getMostRecent
+  "Get's messages since last checked"
+  [beacon_id user_id]
+  (let[query2 "SELECT * FROM messages WHERE to_user_id = ? AND beacon = ? AND
+       (time_posted > (SELECT last_update FROM receive_update WHERE user_id = ? AND beacon = ?));"]
+    (sql/query messages/spec [query2 user_id beacon_id user_id beacon_id])))
+
+(defn- getAll
+  "current gets all direct messages a year back"
+  [beacon_id user_id]
+  (let [query2 "SELECT * FROM messages WHERE to_user_id = ? AND beacon = ? AND
+        (time_posted > (NOW() - interval '1 year'));"]
+    (sql/query messages/spec [query2 user_id beacon_id])))
+
+(defn- updateLastChecked
+  [beacon_id user_id]
+  (let [query "UPDATE receive_update SET last_update = NOW() WHERE user_id = ? AND beacon = ?;"]
+    (sql/execute! messages/spec [query user_id beacon_id])))
+
+(defn- getMessageHelper
+  [beacon_id user_id]
+  (let [query1 "SELECT count(*) FROM receive_update WHERE user_id = ? AND beacon = ?;"
+        hasChecked (-> (sql/query messages/spec [query1 user_id beacon_id])
+                       first
+                       :count
+                       pos?)
+        withNames
+        (if hasChecked
+          (getMostRecent beacon_id user_id)
+          (getAll beacon_id user_id))
+        directMessages (map #(anon %) withNames)]
+    (updateLastChecked beacon_id user_id)
+      {:directMessages directMessages}))
+
+(defn- getBeaconID
+  [uuid major minor]
+  (let [query "SELECT id FROM beacons WHERE uuid = ? AND major = ? AND minor = ?;"]
+    (-> (sql/query messages/spec [query uuid major minor])
+        first
+        :id)))
+
+(defn- getMessages
+  "checks to see if beacon is known, if it is, it looks for messages that have user id and the beacon
+  id returned that were posted after last updated"
+  [beacons user_id]
+  (let [beacon_ids (map #(getBeaconID (:uuid %) (:major %) (:minor %)) beacons)]
+    ;; beacon is registered
+    (when-not (empty? beacon_ids)
+      ;; update last time read
+      (map #(getMessageHelper % user_id) beacon_ids))))
 
 (defroutes app
-  (GET "/" []
-       (splash))
+  ;; check to see if user has beacons/is willing to accept anything
+  ;; if has beacons, checks to see if beacon is the one currently being talked to
+  ;; if public, grabs any outstanding messages for that users.
+  (GET "/getMessages" [:as request]
+       (let [req (get-in request [:params])]
+         (ring/response (getMessages (:beacons req) (:user_id req)))))
+  (GET "/getPublic" [:as request]
+       (let [beacons (get-in request [:params :beacons])
+             beacon_ids (map #(getBeaconID %) beacons)]
+         (ring/response (map #(getPublicMessages %) beacon_ids))))
   (ANY "*" []
        (route/not-found (slurp (io/resource "404.html")))))
 
 (defn -main [& [port]]
+  (users/migrate)
+  (beacons/migrate)
+  (receive-update/migrate)
+  (messages/migrate)
   (let [port (Integer. (or port (env :port) 5000))]
     (jetty/run-jetty (site #'app) {:port port :join? false})))
